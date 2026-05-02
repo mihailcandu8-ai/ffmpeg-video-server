@@ -1,7 +1,6 @@
 const express = require('express');
 const { execSync } = require('child_process');
 const fs = require('fs');
-const path = require('path');
 const app = express();
 app.use(express.json({ limit: '2gb' }));
 app.use(express.urlencoded({ limit: '2gb', extended: true }));
@@ -12,18 +11,22 @@ app.post('/render', async (req, res) => {
   fs.mkdirSync(tmpDir);
 
   try {
-    execSync(`curl -o ${tmpDir}/audio.mp3 "${audio_url}"`);
+    // Scarica audio
+    execSync(`curl -L -o ${tmpDir}/audio.mp3 "${audio_url}"`);
 
+    // Salva immagini da base64
     let fileList = '';
     for (let i = 0; i < images.length; i++) {
       const imgPath = `${tmpDir}/img_${i}.jpg`;
-      execSync(`curl -o ${imgPath} "${images[i].url}"`);
+      const base64Data = images[i].base64.replace(/^data:image\/\w+;base64,/, '');
+      fs.writeFileSync(imgPath, Buffer.from(base64Data, 'base64'));
       fileList += `file '${imgPath}'\nduration ${images[i].duration}\n`;
     }
     fs.writeFileSync(`${tmpDir}/list.txt`, fileList);
 
+    // Assembla video
     const outputPath = `${tmpDir}/output.mp4`;
-    execSync(`ffmpeg -f concat -safe 0 -i ${tmpDir}/list.txt -i ${tmpDir}/audio.mp3 -c:v libx264 -c:a aac -shortest ${outputPath}`);
+    execSync(`ffmpeg -f concat -safe 0 -i ${tmpDir}/list.txt -i ${tmpDir}/audio.mp3 -c:v libx264 -c:a aac -shortest -y ${outputPath}`);
 
     res.download(outputPath, `${output_name}.mp4`, () => {
       fs.rmSync(tmpDir, { recursive: true });
