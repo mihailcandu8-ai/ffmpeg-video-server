@@ -1,35 +1,55 @@
 const express = require('express');
-const { execSync } = require('child_process');
+const { spawnSync } = require('child_process');
 const fs = require('fs');
 const app = express();
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(express.json({ limit: '500mb' }));
 
-app.post('/render', async (req, res) => {
+app.post('/render', (req, res) => {
   const { images, audio_url, output_name } = req.body;
   const tmpDir = `/tmp/${Date.now()}`;
   fs.mkdirSync(tmpDir);
 
   try {
     // Scarica audio
-    execSync(`curl -L -o ${tmpDir}/audio.mp3 "${audio_url}"`);
+    const audioPath = `${tmpDir}/audio.mp3`;
+    spawnSync('curl', ['-L', '-o', audioPath, audio_url]);
 
-    // Scarica immagini tramite URL
+    // Salva immagini da base64
     let fileList = '';
     for (let i = 0; i < images.length; i++) {
       const imgPath = `${tmpDir}/img_${i}.jpg`;
-      execSync(`curl -L -o ${imgPath} "${images[i].url}"`);
+      const base64 = images[i].base64.replace(/^data:image\/\w+;base64,/, '');
+      fs.writeFileSync(imgPath, Buffer.from(base64, 'base64'));
       fileList += `file '${imgPath}'\nduration ${images[i].duration}\n`;
     }
-    fs.writeFileSync(`${tmpDir}/list.txt`, fileList);
+    
+    const listPath = `${tmpDir}/list.txt`;
+    fs.writeFileSync(listPath, fileList);
 
-    // Assembla video
     const outputPath = `${tmpDir}/output.mp4`;
-    execSync(`ffmpeg -f concat -safe 0 -i ${tmpDir}/list.txt -i ${tmpDir}/audio.mp3 -c:v libx264 -c:a aac -shortest -y ${outputPath}`);
+    
+    const ffmpeg = spawnSync('ffmpeg', [
+      '-f', 'concat',
+      '-safe', '0',
+      '-i', listPath,
+      '-i', audioPath,
+      '-c:v', 'libx264',
+      '-c:a', 'aac',
+      '-shortest',
+      '-y',
+      outputPath
+    ]);
+
+    if (!fs.existsSync(outputPath)) {
+      return res.status(500).json({ 
+        error: ffmpeg.stderr.toString() 
+      });
+    }
 
     res.download(outputPath, `${output_name}.mp4`, () => {
       fs.rmSync(tmpDir, { recursive: true });
     });
+
   } catch (err) {
     fs.rmSync(tmpDir, { recursive: true, force: true });
     res.status(500).json({ error: err.message });
