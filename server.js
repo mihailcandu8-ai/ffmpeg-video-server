@@ -3,7 +3,8 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const app = express();
-app.use(express.json({ limit: '500mb' }));
+app.use(express.json({ limit: '2gb' }));
+app.use(express.urlencoded({ limit: '2gb', extended: true }));
 
 app.post('/render', async (req, res) => {
   const { images, audio_url, output_name } = req.body;
