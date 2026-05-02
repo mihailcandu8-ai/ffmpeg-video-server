@@ -2,8 +2,8 @@ const express = require('express');
 const { execSync } = require('child_process');
 const fs = require('fs');
 const app = express();
-app.use(express.json({ limit: '2gb' }));
-app.use(express.urlencoded({ limit: '2gb', extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 app.post('/render', async (req, res) => {
   const { images, audio_url, output_name } = req.body;
@@ -14,12 +14,11 @@ app.post('/render', async (req, res) => {
     // Scarica audio
     execSync(`curl -L -o ${tmpDir}/audio.mp3 "${audio_url}"`);
 
-    // Salva immagini da base64
+    // Scarica immagini tramite URL
     let fileList = '';
     for (let i = 0; i < images.length; i++) {
       const imgPath = `${tmpDir}/img_${i}.jpg`;
-      const base64Data = images[i].base64.replace(/^data:image\/\w+;base64,/, '');
-      fs.writeFileSync(imgPath, Buffer.from(base64Data, 'base64'));
+      execSync(`curl -L -o ${imgPath} "${images[i].url}"`);
       fileList += `file '${imgPath}'\nduration ${images[i].duration}\n`;
     }
     fs.writeFileSync(`${tmpDir}/list.txt`, fileList);
